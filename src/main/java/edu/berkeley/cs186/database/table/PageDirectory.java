@@ -1,6 +1,5 @@
 package edu.berkeley.cs186.database.table;
 
-import edu.berkeley.cs186.database.TransactionContext;
 import edu.berkeley.cs186.database.common.ByteBuffer;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterable;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
@@ -92,7 +91,6 @@ public class PageDirectory implements HeapFile {
         this.emptyPageMetadataSize = emptyPageMetadataSize;
         this.lockContext = lockContext;
         this.firstHeader = new HeaderPage(pageNum, 0, true);
-        lockContext.capacity(getNumDataPages());
     }
 
     @Override
@@ -122,8 +120,7 @@ public class PageDirectory implements HeapFile {
         }
 
         Page page = this.firstHeader.loadPageWithSpace(requiredSpace);
-        LockContext context = lockContext.childContext(page.getPageNum());
-        LockUtil.ensureSufficientLockHeld(context, LockType.X);
+
         return new DataPage(pageDirectoryId, page);
     }
 
@@ -323,7 +320,7 @@ public class PageDirectory implements HeapFile {
         // gets and loads a page with the required free space
         private Page loadPageWithSpace(short requiredSpace) {
             // TODO(proj4_part3): update table capacity
-            lockContext.capacity(numDataPages);
+
             this.page.pin();
             try {
                 Buffer b = this.page.getBuffer();

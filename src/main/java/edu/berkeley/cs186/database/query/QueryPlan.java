@@ -231,40 +231,15 @@ public class QueryPlan {
         // Pass 1: Iterate through all single tables. For each single table, find
         // the lowest cost QueryOperator to access that table. Construct a mapping
         // of each table name to its lowest cost operator.
-        List<String> singleTables = new ArrayList<>();
-        singleTables.add(startTableName);
-        singleTables.addAll(joinTableNames);
-        List<QueryOperator> singleTableQueryPlan = new ArrayList<>();
-        for (String table : singleTables) { singleTableQueryPlan.add(minCostSingleAccess(table)); }
-        // Map<Set, QueryOperator> pass1Map = new HashMap<>();
 
         // Pass i: On each pass, use the results from the previous pass to find the
         // lowest cost joins with each single table. Repeat until all tables have
         // been joined.
-        Map<Set, QueryOperator> prevMap = new HashMap<>();
-        for (int i = 0; i < singleTables.size(); i++) {
-            String tableName = singleTables.get(i);
-            Set set = new HashSet();
-            set.add(tableName);
-            prevMap.put(set, singleTableQueryPlan.get(i));
-        }
-        Map<Set, QueryOperator> pass1Map = new HashMap<>(prevMap);
-        for (int i = 0; i < singleTables.size() - 1; i++) {
-            prevMap = minCostJoins(prevMap, pass1Map);
-        }
 
         // Get the lowest cost operator from the last pass, add GROUP BY and SELECT
         // operators, and return an iterator on the final operator
-        QueryOperator queryOperator = null;
-        for (Map.Entry<Set, QueryOperator> e : prevMap.entrySet()) {
-            if (queryOperator == null) { queryOperator = e.getValue(); }
-            QueryOperator q = e.getValue();
-            if (queryOperator.getIOCost() > q.getIOCost()) { queryOperator = q; }
-        }
-        finalOperator = queryOperator;
-        addGroupBy();
-        addProjects();
-        return finalOperator.execute();
+
+        return this.executeNaive(); // TODO(proj3_part2): Replace this!!! Allows you to test intermediate functionality
     }
 
     /**
@@ -356,34 +331,16 @@ public class QueryPlan {
         // Find the cost of a sequential scan of the table
         // minOp = new SequentialScanOperator(this.transaction, table);
 
+        // TODO(proj3_part2): implement
+
         // 1. Find the cost of a sequential scan of the table
-        List<Integer> eligibleIndexColumns = getEligibleIndexColumns(table);
-        minOp = new SequentialScanOperator(this.transaction, table);
-        int finalIndexCol = -1;
-        List<String> fieldNames = transaction.getTable(table).getSchema().getFieldNames();
-        int cost = minOp.cost;
 
         // 2. For each eligible index column, find the cost of an index scan of the
         // table and retain the lowest cost operator
-        for (int indexCol : eligibleIndexColumns) {
-            String colName = selectColumnNames.get(indexCol);
-            PredicateOperator curPre = selectOperators.get(indexCol);
-            DataBox curDataBox = selectDataBoxes.get(indexCol);
-            IndexScanOperator indexScanOperator = new IndexScanOperator(transaction, table, colName, curPre, curDataBox);
-            if (indexScanOperator.getIOCost() < cost) {
-                cost = indexScanOperator.getIOCost();
-                minOp = indexScanOperator;
-                finalIndexCol = indexCol;
-            }
-        }
+
         // 3. Push down SELECT predicates that apply to this table and that were not
         // used for an index scan
-        if (minOp.isIndexScan()) {
-            IndexScanOperator indexOp = (IndexScanOperator) minOp;
-            minOp = addEligibleSelections(minOp, finalIndexCol);
-        } else {
-            minOp = addEligibleSelections(minOp, -1);
-        }
+
         return minOp;
     }
 
@@ -430,6 +387,8 @@ public class QueryPlan {
                                          Map<Set, QueryOperator> pass1Map) {
         Map<Set, QueryOperator> map = new HashMap<>();
 
+        // TODO(proj3_part2): implement
+
         //We provide a basic description of the logic you have to implement
 
         //Input: prevMap (maps a set of tables to a query operator--the operator that joins the set)
@@ -453,47 +412,7 @@ public class QueryPlan {
          * --- Then given the operator, use minCostJoinType to calculate the cheapest join with that
          * and the previously joined tables.
          */
-        QueryOperator leftOp = null;
-        QueryOperator rightOp = null;
-        Set subSet = null;
-        for (Set childTableSet : prevMap.keySet()) {
-            int size = joinTableNames.size();
-            for (int i = 0; i < size; i++) {
-                String[] sLeft = getJoinLeftColumnNameByIndex(i);
-                String[] sRight = getJoinRightColumnNameByIndex(i);
-                String leftTableName = sLeft[0];
-                String leftColName = sLeft[1];
-                String rightTableName = sRight[0];
-                String rightColName = sRight[1];
 
-                boolean leftCondition = childTableSet.contains(leftTableName);
-                boolean rightCondition = childTableSet.contains(rightTableName);
-                // Case 1:
-                if (leftCondition && !rightCondition) {
-                    subSet = new HashSet();
-                    subSet.add(rightTableName);
-                    leftOp = prevMap.get(childTableSet);
-                    rightOp = pass1Map.get(subSet);
-
-                }
-                // Case 2:
-                else if (!leftCondition && rightCondition) {
-                    subSet = new HashSet();
-                    subSet.add(leftTableName);
-                    leftOp = pass1Map.get(subSet);
-                    rightOp = prevMap.get(childTableSet);
-                }
-                else { continue; }
-                subSet.addAll(childTableSet);
-                QueryOperator subResOp = minCostJoinType(leftOp, rightOp, leftColName, rightColName);
-                if (!map.containsKey(subSet)) {
-                    map.put(subSet, subResOp);
-                }
-                else if (subResOp.getIOCost() < map.get(subSet).getIOCost()) {
-                    map.put(subSet, subResOp);
-                }
-            }
-        }
         return map;
     }
 

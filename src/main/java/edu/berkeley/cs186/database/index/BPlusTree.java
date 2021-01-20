@@ -87,8 +87,6 @@ public class BPlusTree {
      */
     public BPlusTree(BufferManager bufferManager, BPlusTreeMetadata metadata, LockContext lockContext) {
         // TODO(proj4_part3): B+ tree locking
-        lockContext.disableChildLocks();
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.X);
 
         // Sanity checks.
         if (metadata.getOrder() < 0) {
@@ -138,12 +136,10 @@ public class BPlusTree {
      */
     public Optional<RecordId> get(DataBox key) {
         typecheck(key);
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
+        // TODO(proj2): implement
+        // TODO(proj4_part3): B+ tree locking
 
-        LeafNode node = root.get(key);
-        return node.getKey(key);
-
-
+        return Optional.empty();
     }
 
     /**
@@ -156,7 +152,7 @@ public class BPlusTree {
     public Iterator<RecordId> scanEqual(DataBox key) {
         typecheck(key);
         // TODO(proj4_part3): B+ tree locking
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
+
         Optional<RecordId> rid = get(key);
         if (rid.isPresent()) {
             ArrayList<RecordId> l = new ArrayList<>();
@@ -193,36 +189,10 @@ public class BPlusTree {
      * memory will receive 0 points.
      */
     public Iterator<RecordId> scanAll() {
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
+        // TODO(proj2): Return a BPlusTreeIterator.
+        // TODO(proj4_part3): B+ tree locking
 
-        return new ScanAllIter();
-
-    }
-
-    private class ScanAllIter implements Iterator<RecordId> {
-        private LeafNode currentScanLeaf;
-        private Iterator<RecordId> currentLeafScanIter;
-        private ScanAllIter() {
-            currentScanLeaf = root.getLeftmostLeaf();
-            currentLeafScanIter = currentScanLeaf.scanAll();
-        }
-        @Override
-        public boolean hasNext() {
-            if (!currentLeafScanIter.hasNext() && !currentScanLeaf.getRightSibling().isPresent()) {
-                return false;
-            }
-            while (!currentLeafScanIter.hasNext() && currentScanLeaf != null) {
-                currentScanLeaf = currentScanLeaf.getRightSibling().get();
-                currentLeafScanIter = currentScanLeaf.scanAll();
-            }
-            return currentLeafScanIter.hasNext();
-        }
-
-        @Override
-        public RecordId next() {
-            if (!hasNext()) { throw new UnsupportedOperationException("There is no next value!"); }
-            return currentLeafScanIter.next();
-        }
+        return Collections.emptyIterator();
     }
 
     /**
@@ -250,35 +220,10 @@ public class BPlusTree {
      */
     public Iterator<RecordId> scanGreaterEqual(DataBox key) {
         typecheck(key);
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
-        return new ScanGreaterEqual(key);
+        // TODO(proj2): Return a BPlusTreeIterator.
+        // TODO(proj4_part3): B+ tree locking
 
-    }
-
-    private class ScanGreaterEqual implements Iterator<RecordId> {
-        private LeafNode currentScanLeaf;
-        private Iterator<RecordId> currentLeafScanIter;
-        private ScanGreaterEqual(DataBox key) {
-            currentScanLeaf = root.get(key);
-            currentLeafScanIter = currentScanLeaf.scanGreaterEqual(key);
-        }
-        @Override
-        public boolean hasNext() {
-            if (!currentLeafScanIter.hasNext() && !currentScanLeaf.getRightSibling().isPresent()) {
-                return false;
-            }
-            while (!currentLeafScanIter.hasNext() && currentScanLeaf != null) {
-                currentScanLeaf = currentScanLeaf.getRightSibling().get();
-                currentLeafScanIter = currentScanLeaf.scanAll();
-            }
-            return currentLeafScanIter.hasNext();
-        }
-
-        @Override
-        public RecordId next() {
-            if (!hasNext()) { throw new UnsupportedOperationException("There is no next value!"); }
-            return currentLeafScanIter.next();
-        }
+        return Collections.emptyIterator();
     }
 
     /**
@@ -292,27 +237,8 @@ public class BPlusTree {
      */
     public void put(DataBox key, RecordId rid) {
         typecheck(key);
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.X);
-
-        Optional<Pair<DataBox, Long>> popUpPair = root.put(key, rid);
-
-        // root not split
-        if (!popUpPair.isPresent()) { return; }
-
-        // root split
-
-        // new root data
-        List<DataBox> keys = new ArrayList<>();
-        List<Long> children = new ArrayList<>();
-        keys.add(popUpPair.get().getFirst());
-
-        BPlusNode splitRoot = BPlusNode.fromBytes(metadata, bufferManager, lockContext, popUpPair.get().getSecond());
-        children.add(root.getPage().getPageNum());
-        children.add(popUpPair.get().getSecond());
-
-        InnerNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
-        updateRoot(newRoot);
-
+        // TODO(proj2): implement
+        // TODO(proj4_part3): B+ tree locking
 
         return;
     }
@@ -335,31 +261,8 @@ public class BPlusTree {
      * bulkLoad (see comments in BPlusNode.bulkLoad).
      */
     public void bulkLoad(Iterator<Pair<DataBox, RecordId>> data, float fillFactor) {
-        // Check empty
-        if (new ScanAllIter().hasNext()) { throw new UnsupportedOperationException("The BPlusTree is not empty!"); }
-
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.X);
-        // Load data
-        while (data.hasNext()) {
-            Optional<Pair<DataBox, Long>> popUpPair = root.bulkLoad(data, fillFactor);
-
-            // split root
-            if (popUpPair.isPresent()) {
-                List<DataBox> keys = new ArrayList<>();
-                List<Long> children = new ArrayList<>();
-                keys.add(popUpPair.get().getFirst());
-                children.add(root.getPage().getPageNum());
-                children.add(popUpPair.get().getSecond());
-
-                // create new root
-                InnerNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
-                // update new root
-                updateRoot(newRoot);
-            }
-        }
-
-
-
+        // TODO(proj2): implement
+        // TODO(proj4_part3): B+ tree locking
 
         return;
     }
@@ -377,8 +280,9 @@ public class BPlusTree {
      */
     public void remove(DataBox key) {
         typecheck(key);
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.X);
-        root.remove(key);
+        // TODO(proj2): implement
+        // TODO(proj4_part3): B+ tree locking
+
         return;
     }
 
@@ -389,7 +293,6 @@ public class BPlusTree {
      */
     public String toSexp() {
         // TODO(proj4_part3): B+ tree locking
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
         return root.toSexp();
     }
 
@@ -407,7 +310,6 @@ public class BPlusTree {
      */
     public String toDot() {
         // TODO(proj4_part3): B+ tree locking
-        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
         List<String> strings = new ArrayList<>();
         strings.add("digraph g {" );
         strings.add("  node [shape=record, height=0.1];");
