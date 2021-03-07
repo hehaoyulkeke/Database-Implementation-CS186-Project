@@ -89,6 +89,23 @@ class BNLJOperator extends JoinOperator {
          */
         private void fetchNextLeftBlock() {
             // TODO(proj3_part1): implement
+            if (!leftIterator.hasNext())
+                throw new NoSuchElementException("No more pages!");
+
+            BacktrackingIterator<Record> blockIterator =
+                    getBlockIterator(getLeftTableName(), leftIterator, numBuffers - 2);
+            while (!blockIterator.hasNext()) {
+                try {
+                    blockIterator = getBlockIterator(getLeftTableName(), leftIterator, numBuffers - 2);
+                } catch (NoSuchElementException e) {
+                    leftRecordIterator = null;
+                    leftRecord = null;
+                    throw new NoSuchElementException("No more pages!");
+                }
+            }
+            leftRecordIterator = blockIterator;
+            leftRecordIterator.markNext();
+            leftRecord = leftRecordIterator.next();
         }
 
         /**
@@ -101,6 +118,20 @@ class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRightPage() {
             // TODO(proj3_part1): implement
+            if (!rightIterator.hasNext())
+                throw new NoSuchElementException("No more pages!");
+            BacktrackingIterator<Record> blockIterator =
+                    getBlockIterator(getRightTableName(), rightIterator, 1);
+            while (!blockIterator.hasNext()) {
+                try {
+                    blockIterator = getBlockIterator(getRightTableName(), leftIterator, 1);
+                } catch (NoSuchElementException e) {
+                    rightRecordIterator = null;
+                    throw new NoSuchElementException("No more pages!");
+                }
+            }
+            rightRecordIterator = blockIterator;
+            rightRecordIterator.markNext();
         }
 
         /**
@@ -111,6 +142,36 @@ class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRecord() {
             // TODO(proj3_part1): implement
+            if (leftRecord == null) {
+                nextRecord = null;
+                throw new NoSuchElementException("There is no more record!");
+            }
+
+            Record res = null;
+            while (res == null) {
+                if (rightRecordIterator != null && rightRecordIterator.hasNext()) {
+                    Record rightRecord = rightRecordIterator.next();
+                    DataBox leftVal = leftRecord.getValues().get(getLeftColumnIndex());
+                    DataBox rightVal = rightRecord.getValues().get(getRightColumnIndex());
+                    if (leftVal.equals(rightVal))
+                        res = joinRecords(leftRecord, rightRecord);
+
+                } else {
+                    if (leftRecordIterator.hasNext()) {
+                        leftRecord = leftRecordIterator.next();
+                        rightRecordIterator.reset();
+                    } else if (rightIterator.hasNext()) {
+                        fetchNextRightPage();
+                        leftRecordIterator.reset();
+                        leftRecord = leftRecordIterator.next();
+                    } else {
+                        fetchNextLeftBlock();
+                        rightIterator.reset();
+                        fetchNextRightPage();
+                    }
+                }
+            }
+            nextRecord = res;
         }
 
         /**

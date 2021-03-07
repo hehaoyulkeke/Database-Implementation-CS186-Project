@@ -79,8 +79,8 @@ class InnerNode extends BPlusNode {
     @Override
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
-
-        return null;
+        int i = numLessThanEqual(key, keys);
+        return getChild(i).get(key);
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -88,16 +88,45 @@ class InnerNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         assert(children.size() > 0);
         // TODO(proj2): implement
-
-        return null;
+        return getChild(0).getLeftmostLeaf();
     }
+
 
     // See BPlusNode.put.
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
+        int index = numLessThanEqual(key, keys);
+        BPlusNode child = getChild(index);
+        Optional<Pair<DataBox, Long>> pair = child.put(key, rid);
 
-        return Optional.empty();
+        int order = metadata.getOrder();
+        int maxSize = order * 2;
+
+        // child not split
+        if (!pair.isPresent()) {
+            return Optional.empty();
+        }
+        DataBox newKey = pair.get().getFirst();
+        Long newChildPageId = pair.get().getSecond();
+        keys.add(index, newKey);
+        children.add(index + 1, newChildPageId);
+        if (keys.size() <= maxSize) {
+            sync();
+            return Optional.empty();
+        }
+
+        // child split, create a new InnerNode
+        List<DataBox> newKeys = keys.subList(order, 2*order+1);
+        List<Long> newChildren = children.subList(order+1, 2*order+2);
+        DataBox popUpKey = newKeys.remove(0);
+        keys = keys.subList(0, order);
+        children = children.subList(0, order+1);
+        InnerNode newNode = new InnerNode(metadata, bufferManager, newKeys, newChildren, treeContext);
+        long popUpPageNum = newNode.getPage().getPageNum();
+        newNode.sync();
+        sync();
+        return Optional.of(new Pair<>(popUpKey, popUpPageNum));
     }
 
     // See BPlusNode.bulkLoad.
@@ -105,16 +134,42 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
+        int maxSize = metadata.getOrder()*2;
+        while (keys.size() <= maxSize && data.hasNext()) {
+            BPlusNode rightMost = getChild(keys.size());
+            Optional<Pair<DataBox, Long>> opt = rightMost.bulkLoad(data, fillFactor);
+            if (opt.isPresent()) {
+                Pair<DataBox, Long> pair = opt.get();
+                keys.add(pair.getFirst());
+                children.add(pair.getSecond());
+            }
+        }
 
-        return Optional.empty();
+        if (keys.size() <= maxSize) {
+            sync();
+            return Optional.empty();
+        }
+
+        int mid = keys.size()/2;
+        DataBox splitKey = keys.get(mid);
+        List<DataBox> newKeys = keys.subList(mid+1, keys.size());
+        List<Long> newChildren = children.subList(mid+1, children.size());
+        keys = keys.subList(0, mid);
+        children = children.subList(0, mid);
+        InnerNode newNode = new InnerNode(metadata, bufferManager,
+                newKeys, newChildren, treeContext);
+        newNode.sync();
+        sync();
+        return Optional.of(new Pair<>(splitKey, newNode.getPage().getPageNum()));
     }
 
     // See BPlusNode.remove.
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
-        return;
+        int idx = numLessThanEqual(key, keys);
+        BPlusNode child = getChild(idx);
+        child.remove(key);
     }
 
     // Helpers ///////////////////////////////////////////////////////////////////

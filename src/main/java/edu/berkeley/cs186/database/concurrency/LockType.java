@@ -21,7 +21,6 @@ public enum LockType {
             throw new NullPointerException("null lock type");
         }
         // TODO(proj4_part1): implement
-
         return false;
     }
 

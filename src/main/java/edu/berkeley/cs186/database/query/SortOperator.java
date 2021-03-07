@@ -10,6 +10,8 @@ import edu.berkeley.cs186.database.common.Pair;
 import edu.berkeley.cs186.database.memory.Page;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public class SortOperator {
     private TransactionContext transaction;
@@ -72,8 +74,11 @@ public class SortOperator {
      */
     public Run sortRun(Run run) {
         // TODO(proj3_part1): implement
-
-        return null;
+        List<Record> list = StreamSupport.stream(run.spliterator(), true).
+                sorted(comparator).collect(Collectors.toList());
+        Run res = createRun();
+        res.addRecords(list);
+        return res;
     }
 
     /**
@@ -86,8 +91,24 @@ public class SortOperator {
      */
     public Run mergeSortedRuns(List<Run> runs) {
         // TODO(proj3_part1): implement
+        Run res = createRun();
+        List<Iterator<Record>> iterators = new ArrayList<>(runs.size());
+        for (Run r: runs)
+            iterators.add(r.iterator());
+        PriorityQueue<Pair<Record, Integer>> pq = new PriorityQueue<>(new RecordPairComparator());
+        for (int i=0; i<runs.size(); i++) {
+            Iterator<Record> iterator = iterators.get(i);
+            pq.offer(new Pair<>(iterator.next(), i));
+        }
 
-        return null;
+        while (!pq.isEmpty()) {
+            Pair<Record, Integer> tmp = pq.poll();
+            res.addRecord(tmp.getFirst().getValues());
+            Iterator<Record> iterator = iterators.get(tmp.getSecond());
+            if (iterator.hasNext())
+                pq.offer(new Pair<>(iterator.next(), tmp.getSecond()));
+        }
+        return res;
     }
 
     /**
@@ -99,8 +120,18 @@ public class SortOperator {
      */
     public List<Run> mergePass(List<Run> runs) {
         // TODO(proj3_part1): implement
-
-        return Collections.emptyList();
+        List<Run> res = new ArrayList<>();
+        List<Run> tmpRuns = new ArrayList<>();
+        for (Run r: runs) {
+            if (tmpRuns.size() == numBuffers-1) {
+                res.add(mergeSortedRuns(tmpRuns));
+                tmpRuns.clear();
+            }
+            tmpRuns.add(r);
+        }
+        if (!tmpRuns.isEmpty())
+            res.add(mergeSortedRuns(tmpRuns));
+        return res;
     }
 
     /**
@@ -110,8 +141,18 @@ public class SortOperator {
      */
     public String sort() {
         // TODO(proj3_part1): implement
-
-        return this.tableName; // TODO(proj3_part1): replace this!
+        List<Run> pass = new ArrayList<>();
+        BacktrackingIterator<Page> pageIterator = transaction.getPageIterator(tableName);
+        while (pageIterator.hasNext()) {
+            BacktrackingIterator<Record> blockIterator = transaction.getBlockIterator
+                    (tableName, pageIterator, numBuffers);
+            pass.add(sortRun(createRunFromIterator(blockIterator)));
+        }
+        if (pass.size() == 0)
+            return createRun().tableName();
+        while (pass.size() > 1)
+            pass = mergePass(pass);
+        return pass.get(0).tableName();
     }
 
     public Iterator<Record> iterator() {
